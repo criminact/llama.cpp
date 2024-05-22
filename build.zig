@@ -65,16 +65,24 @@ const Maker = struct {
         return m;
     }
 
-    fn obj(m: *const Maker, name: []const u8, src: []const u8) *Compile {
+    fn obj(m: *const Maker, name: []const u8, srcs: []const []const u8) *Compile {
         const o = m.builder.addObject(.{ .name = name, .target = m.target, .optimize = m.optimize });
         if (o.target.getAbi() != .msvc)
             o.defineCMacro("_GNU_SOURCE", null);
 
-        if (std.mem.endsWith(u8, src, ".c")) {
-            o.addCSourceFiles(&.{src}, m.cflags.items);
+        var is_c = true;
+        for (srcs) |src| {
+            if (!std.mem.endsWith(u8, src, ".c")) {
+                is_c = false;
+                break;
+            }
+        }
+
+        if (is_c) {
+            o.addCSourceFiles(srcs, m.cflags.items);
             o.linkLibC();
         } else {
-            o.addCSourceFiles(&.{src}, m.cxxflags.items);
+            o.addCSourceFiles(srcs, m.cxxflags.items);
             if (o.target.getAbi() == .msvc) {
                 o.linkLibC(); // need winsdk + crt
             } else {
@@ -82,6 +90,7 @@ const Maker = struct {
                 o.linkLibCpp();
             }
         }
+
         for (m.include_dirs.items) |i| o.addIncludePath(.{ .path = i });
         o.want_lto = m.enable_lto;
         return o;
@@ -111,32 +120,33 @@ pub fn build(b: *std.build.Builder) !void {
     var make = try Maker.init(b);
     make.enable_lto = b.option(bool, "lto", "Enable LTO optimization, (default: false)") orelse false;
 
-    const ggml = make.obj("ggml", "ggml.c");
-    const sgemm = make.obj("sgemm", "sgemm.cpp");
-    const ggml_alloc = make.obj("ggml-alloc", "ggml-alloc.c");
-    const ggml_backend = make.obj("ggml-backend", "ggml-backend.c");
-    const ggml_quants = make.obj("ggml-quants", "ggml-quants.c");
-    const unicode = make.obj("unicode", "unicode.cpp");
-    const unicode_data = make.obj("unicode-data", "unicode-data.cpp");
-    const llama = make.obj("llama", "llama.cpp");
-    const buildinfo = make.obj("common", "common/build-info.cpp");
-    const common = make.obj("common", "common/common.cpp");
-    const console = make.obj("console", "common/console.cpp");
-    const sampling = make.obj("sampling", "common/sampling.cpp");
-    const grammar_parser = make.obj("grammar-parser", "common/grammar-parser.cpp");
-    const json_schema_to_grammar = make.obj("json-schema-to-grammar", "common/json-schema-to-grammar.cpp");
-    const train = make.obj("train", "common/train.cpp");
-    const clip = make.obj("clip", "examples/llava/clip.cpp");
-    const llava = make.obj("llava", "examples/llava/llava.cpp");
+    const ggml         = make.obj("ggml",           "ggml.c");
+    const sgemm        = make.obj("sgemm",          "sgemm.cpp");
+    const ggml_alloc   = make.obj("ggml-alloc",     "ggml-alloc.c");
+    const ggml_backend = make.obj("ggml-backend",   "ggml-backend.c");
+    const ggml_quants  = make.obj("ggml-quants",    "ggml-quants.c");
+    const unicode      = make.obj("unicode",        "unicode.cpp");
+    const unicode_data = make.obj("unicode-data",   "unicode-data.cpp");
+    const llama        = make.obj("llama",          "llama.cpp");
+    const common       = make.obj("common",         "common/build-info.cpp",
+                                                    "common/common.cpp",
+                                                    "common/console.cpp",
+                                                    "common/sampling.cpp",
+                                                    "common/grammar-parser.cpp",
+                                                    "common/json-schema-to-grammar.cpp",
+                                                    "common/train.cpp");
+    const clip         = make.obj("clip",           "examples/llava/clip.cpp");
+    const llava        = make.obj("llava",          "examples/llava/llava.cpp");
 
-    _ = make.exe("main", "examples/main/main.cpp", &.{ ggml, sgemm, ggml_alloc, ggml_backend, ggml_quants, llama, unicode, unicode_data, common, json_schema_to_grammar, buildinfo, sampling, console, grammar_parser });
-    _ = make.exe("quantize", "examples/quantize/quantize.cpp", &.{ ggml, sgemm, ggml_alloc, ggml_backend, ggml_quants, llama, unicode, unicode_data, common, json_schema_to_grammar, buildinfo });
-    _ = make.exe("perplexity", "examples/perplexity/perplexity.cpp", &.{ ggml, sgemm, ggml_alloc, ggml_backend, ggml_quants, llama, unicode, unicode_data, common, json_schema_to_grammar, buildinfo });
-    _ = make.exe("embedding", "examples/embedding/embedding.cpp", &.{ ggml, sgemm, ggml_alloc, ggml_backend, ggml_quants, llama, unicode, unicode_data, common, json_schema_to_grammar, buildinfo });
-    _ = make.exe("finetune", "examples/finetune/finetune.cpp", &.{ ggml, sgemm, ggml_alloc, ggml_backend, ggml_quants, llama, unicode, unicode_data, common, json_schema_to_grammar, buildinfo, train });
-    _ = make.exe("train-text-from-scratch", "examples/train-text-from-scratch/train-text-from-scratch.cpp", &.{ ggml, sgemm, ggml_alloc, ggml_backend, ggml_quants, llama, unicode, unicode_data, common, json_schema_to_grammar, buildinfo, train });
+    _ = make.exe("main",        "examples/main/main.cpp",               &.{ ggml, sgemm, ggml_alloc, ggml_backend, ggml_quants, llama, unicode, unicode_data, common });
+    _ = make.exe("quantize",    "examples/quantize/quantize.cpp",       &.{ ggml, sgemm, ggml_alloc, ggml_backend, ggml_quants, llama, unicode, unicode_data, common });
+    _ = make.exe("perplexity",  "examples/perplexity/perplexity.cpp",   &.{ ggml, sgemm, ggml_alloc, ggml_backend, ggml_quants, llama, unicode, unicode_data, common });
+    _ = make.exe("embedding",   "examples/embedding/embedding.cpp",     &.{ ggml, sgemm, ggml_alloc, ggml_backend, ggml_quants, llama, unicode, unicode_data, common });
+    _ = make.exe("finetune",    "examples/finetune/finetune.cpp",       &.{ ggml, sgemm, ggml_alloc, ggml_backend, ggml_quants, llama, unicode, unicode_data, common });
 
-    const server = make.exe("server", "examples/server/server.cpp", &.{ ggml, sgemm, ggml_alloc, ggml_backend, ggml_quants, llama, unicode, unicode_data, common, json_schema_to_grammar, buildinfo, sampling, grammar_parser, clip, llava });
+    _ = make.exe("train-text-from-scratch", "examples/train-text-from-scratch/train-text-from-scratch.cpp", &.{ ggml, sgemm, ggml_alloc, ggml_backend, ggml_quants, llama, unicode, unicode_data, common });
+
+    const server = make.exe("server", "examples/server/server.cpp", &.{ ggml, sgemm, ggml_alloc, ggml_backend, ggml_quants, llama, unicode, unicode_data, common, clip, llava });
     if (server.target.isWindows()) {
         server.linkSystemLibrary("ws2_32");
     }
