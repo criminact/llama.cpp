@@ -3416,5 +3416,13 @@ common_params_context common_params_parser_init(common_params & params, llama_ex
         }
     ).set_examples({LLAMA_EXAMPLE_SERVER}));
 
+    add_opt(common_arg(
+        {"-rv", "--reverse-output"},
+        "reverse the output string after generation",
+        [](common_params & params) {
+            params.reverse_output = true;
+        }
+    ).set_examples({LLAMA_EXAMPLE_MAIN}));
+
     return ctx_arg;
 }
